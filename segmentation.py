@@ -6,6 +6,9 @@ from skimage.morphology import disk,  remove_small_objects, binary_closing
 from skimage.feature import greycomatrix, greycoprops 
 from scipy.ndimage import binary_fill_holes
 
+__all__ = [ 'segmentation_sobel',
+            'segmentation_threshold']
+
 def segmentation_sobel(image):
     """calculates the segmentation per channel using edge detection
     
@@ -22,6 +25,21 @@ def segmentation_sobel(image):
     -------
     segmented_image :  3D array, shape (M, N, C)
         Segmentation of each channel of the input image.
+
+    Raises
+    -------
+    None
+
+    References
+    -------
+    ..  [1] http://jkimmel.net/so-you-want-to-segment-a-cell/
+
+    Notes
+    -----
+    1.  It works best for brightfield channels in Imaging Flow Cytometry (IFC)
+    2.  We have used triangle thresholding instead of otsu as it gives normally a bigger area of segmentation.
+        one has to check whether it needs more thinnening or not.
+
     """
     segmented_image = image.copy()*0
     for ch in range(image.shape[2]):
@@ -55,6 +73,21 @@ def segmentation_threshold(image):
     -------
     segmented_image :  3D array, shape (M, N, C)
         Segmentation of each channel of the input image.
+
+    Raises
+    -------
+    None
+
+    References
+    -------
+    .. [1] https://scikit-image.org/docs/dev/auto_examples/applications/plot_human_mitosis.html
+
+    Notes
+    -----
+    1.  It works best for florescent channels in Imaging Flow Cytometry (IFC).
+    2.  We have used triangle thresholding instead of otsu as it gives normally a bigger area of segmentation.
+        one has to check whether it needs more thinnening or not.
+
     """
     segmented_image = image.copy()*0
     for ch in range(image.shape[2]):
@@ -67,4 +100,5 @@ def segmentation_threshold(image):
         # close the edges of the outline with morphological closing
         bw_close = binary_closing(bw_cleared, selem=disk(5))
         segmented_image[:,:,ch] = binary_fill_holes(bw_close)
+
     return segmented_image
