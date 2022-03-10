@@ -17,17 +17,21 @@ from skimage.feature import haar_like_feature_coord
 from skimage.feature import draw_haar_like_feature
 from skimage.morphology import medial_axis, skeletonize
 from skimage.measure import label, regionprops
+from skimage.feature import daisy
+from sklearn.cluster import KMeans
 
 __all__ = [ 'cell_level_shape_features', 
-            'skeleton_features', 
+            'skeleton_features',
+            'daisy_features', 
+            'clustering_features',  
             'basic_statistical_features', 
             'moments_features', 
             'haar_like_features', 
             'hog_features', 
             'histogram_features', 
             'glcm_features', 
-            'cross_channel_distance_features', 
-            'cross_channel_boolean_distance_features']
+            'cross_Channel_distance_features', 
+            'cross_Channel_boolean_distance_features']
 
 def cell_level_shape_features(mask):
     """calculates the set of cell-skeleton based features 
@@ -109,6 +113,36 @@ def skeleton_features(mask):
     return features
 
 
+def daisy_features(image):
+    """calculates the set of cell-skeleton based features 
+    
+    Calculates medial axis of the segmented cell and calculates the length,
+    maximum and minimum thickness of the skeleton
+
+    Parameters
+    ----------
+    image : 3D array, shape (M, N, C)
+        The input image with multiple channels.
+
+    Returns
+    -------
+    features :  dict  
+        dictionary including percentiles, moments and sum per channel 
+
+    """
+    # storing the feature values
+    features = dict()
+    
+    # calculating the pixels per cells 
+    for ch in range(image.shape[2]):
+        temp_image = resize(image[:,:,ch].copy(), (32,32))
+        daisy_features = daisy(temp_image, step=4, radius=9).reshape(1, -1)
+        for i in range(daisy_features.shape[1]):
+            features["daisy_" + str(i) + "_Ch" + str(ch+1)] = daisy_features[0][i]
+
+    return features
+
+
 def basic_statistical_features(image):
     """calculates the set of basic statistical features 
     
@@ -155,6 +189,36 @@ def basic_statistical_features(image):
     
     return features
 
+def clustering_features(image, k = 10):
+    """calculates the centers of clusters per channel
+    
+    Calculates the centers of the clusters per channel using kmeans
+
+    Parameters
+    ----------
+    image : 3D array, shape (M, N, C)
+        The input image with multiple channels.
+        
+    k : int
+        number of clusters
+
+    Returns
+    -------
+    features :  dict  
+        dictionary including center of the clusters per channel
+
+    """    
+    # storing the feature values
+    features = dict()
+    for ch in range(image.shape[2]):
+        temp_image = image[:,:,ch].copy().reshape(image.shape[0]*image.shape[1],1  )
+        kmeans = KMeans(n_clusters= k, random_state= 314).fit(temp_image)
+        clusters = kmeans.cluster_centers_.tolist()
+        for i in range(k):
+            features["cluster_" + str(i) + "_Ch" + str(ch+1)] = clusters[i][0]
+
+    return features
+
 def moments_features(image):
     """calculates the set of moments for each channel
     
@@ -180,13 +244,13 @@ def moments_features(image):
             features["moments_hu_" + str(i+1) + "_Ch" + str(ch+1)] = hu_moments[i]
         
         inertia_tensor_calculated = inertia_tensor(image[:,:,ch]).ravel()
-        features["inertia_tensor_1_ch" + str(ch+1)] = inertia_tensor_calculated[0]
-        features["inertia_tensor_2_ch" + str(ch+1)] = inertia_tensor_calculated[1]
-        features["inertia_tensor_3_ch" + str(ch+1)] = inertia_tensor_calculated[3]
+        features["inertia_tensor_1_Ch" + str(ch+1)] = inertia_tensor_calculated[0]
+        features["inertia_tensor_2_Ch" + str(ch+1)] = inertia_tensor_calculated[1]
+        features["inertia_tensor_3_Ch" + str(ch+1)] = inertia_tensor_calculated[3]
         
         inertia_tensor_eigvalues = inertia_tensor_eigvals(image[:,:,ch])
-        features["inertia_tensor_eigvalues_1_ch" + str(ch+1)] = inertia_tensor_eigvalues[0]
-        features["inertia_tensor_eigvalues_2_ch" + str(ch+1)] = inertia_tensor_eigvalues[1]   
+        features["inertia_tensor_eigvalues_1_Ch" + str(ch+1)] = inertia_tensor_eigvalues[0]
+        features["inertia_tensor_eigvalues_2_Ch" + str(ch+1)] = inertia_tensor_eigvalues[1]   
 
         the_moments = moments(image[:,:,ch], order=5).ravel()
 
@@ -217,7 +281,7 @@ def haar_like_features(image):
     # storing the feature values
     features = dict()
     for ch in range(image.shape[2]):
-        temp_image = resize(image[:,:,ch].copy(), (64,64))
+        temp_image = resize(image[:,:,ch].copy(), (32,32))
         ii = integral_image(temp_image)
         haar_fatures = haar_like_feature(ii, 0, 0, ii.shape[0], ii.shape[1], ['type-2-x', 'type-2-y'])
         for i in range(len(haar_fatures)):
@@ -243,7 +307,7 @@ def hog_features(image):
         dictionary including hog_1, hog_2 ...
 
     """
-    temp_image = resize(image.copy(), (128,128))
+    temp_image = resize(image.copy(), (64,64))
     # calculating the pixels per cells 
     hog_features= hog(temp_image, orientations=8, pixels_per_cell=(12, 12),
                     cells_per_block=(1, 1), visualize=False, multichannel=True)
@@ -325,7 +389,7 @@ def glcm_features(image):
 
     return features
 
-def cross_channel_distance_features(image):
+def cross_Channel_distance_features(image):
     """calculates the cross channel distance features 
     
     Calculates the distances across channels 
@@ -362,10 +426,13 @@ def cross_channel_distance_features(image):
             features["jensenshannon_distance" + suffix] = dist.jensenshannon(channel1,channel2)
             features["minkowski_distance" + suffix] = dist.minkowski(channel1,channel2)
             features["sqeuclidean_distance" + suffix] = dist.sqeuclidean(channel1,channel2)
-    
+            features["manders_overlap_coefficient" + suffix] = (channel1.sum()*channel2.sum())/(np.power(channel1,2).sum()*np.power(channel2,2).sum())
+            features["intensity_correlation_quotient" + suffix] = ((channel1>channel1.mean())*(channel2>channel2.mean())).sum()/(channel1.shape[0]) - 0.5 
+            
+            
     return features
 
-def cross_channel_boolean_distance_features(mask):
+def cross_Channel_boolean_distance_features(mask):
     """calculates the cross channel distance features 
     
     Calculates the distances across channels 
